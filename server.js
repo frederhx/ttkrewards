@@ -17,7 +17,6 @@ app.use(express.static(__dirname));
 // =======================================================
 // CONFIGURAÇÃO INTELIGENTE (HÍBRIDA)
 // =======================================================
-// Define valores padrão usando variáveis de ambiente (Para a Vercel)
 let config = {
     misticpay: {
         clientId: process.env.MISTICPAY_CLIENT_ID,
@@ -32,24 +31,19 @@ let config = {
     }
 };
 
-// Tenta carregar o arquivo local config.json (Para seu PC)
+// Tenta carregar o arquivo local config.json (Apenas para uso Local no PC)
 try {
-    // Procura na mesma pasta do server.js (./config.json)
     const configPath = path.join(__dirname, 'config.json');
-    
     if (fs.existsSync(configPath)) {
         const configFile = fs.readFileSync(configPath, 'utf8');
         const localConfig = JSON.parse(configFile);
-        
-        // Se achou o arquivo, sobrescreve a configuração da memória
         config = localConfig;
-        console.log('✅ MODO LOCAL: config.json carregado com sucesso.');
+        console.log('✅ MODO LOCAL: config.json carregado.');
     } else {
-        // Se não achou, assume que está na nuvem e segue o jogo
-        console.log('☁️ MODO NUVEM (Vercel): Usando Variáveis de Ambiente.');
+        console.log('☁️ MODO NUVEM: Usando Variáveis de Ambiente.');
     }
 } catch (error) {
-    console.log('⚠️ Aviso: Não foi possível ler config.json, usando variáveis de ambiente.');
+    console.log('⚠️ Aviso: Usando configurações de ambiente.');
 }
 
 // =======================================================
@@ -61,7 +55,7 @@ app.post('/api/create-transaction', async (req, res) => {
     try {
         const transactionId = 'txn_' + Date.now();
 
-        // Garante que os dados existam mesmo se o config falhar
+        // Garante que os dados existam
         const amount = config.payment?.amount || 21.67;
         const desc = config.payment?.description || "Taxa de Serviço";
 
@@ -69,9 +63,14 @@ app.post('/api/create-transaction', async (req, res) => {
             amount: amount,
             description: desc,
             transactionId: transactionId,
-            payerName: req.body.payerName || config.payment?.payerName || "Cliente",
-            payerDocument: req.body.payerDocument || config.payment?.payerCpf || "00000000000"
+            payerName: req.body.payerName || "Cliente",
+            payerDocument: req.body.payerDocument || "00000000000"
         };
+
+        // Verifica se as chaves existem antes de chamar a API
+        if (!config.misticpay.clientId || !config.misticpay.clientSecret) {
+            throw new Error('Credenciais da API não configuradas (Variáveis de Ambiente ausentes).');
+        }
 
         const response = await axios.post(
             `${config.misticpay.apiBaseUrl}/transactions/create`,
@@ -89,12 +88,32 @@ app.post('/api/create-transaction', async (req, res) => {
         res.json(response.data);
 
     } catch (error) {
-        console.error('❌ Erro na API MisticPay:');
+        console.error('❌ Erro:');
         if (error.response) {
             // Erro vindo da MisticPay
-            console.error(error.response.data);
+            console.error(JSON.stringify(error.response.data));
             res.status(error.response.status).json(error.response.data);
         } else {
             // Erro interno/código
             console.error(error.message);
-            res.status(500).json({ message
+            res.status(500).json({ 
+                message: 'Erro interno no servidor.',
+                details: error.message 
+            });
+        }
+    }
+});
+
+// =======================================================
+// INICIALIZAÇÃO (OBRIGATÓRIO PARA VERCEL)
+// =======================================================
+
+// Exporta o app para a Vercel funcionar
+module.exports = app;
+
+// Só abre a porta se estiver rodando localmente (node server.js)
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`\n🚀 Servidor rodando na porta ${PORT}`);
+    });
+}
